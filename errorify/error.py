@@ -10,6 +10,7 @@ ERRORED_FILE = sys.argv[2] + "/" + 'incorr_sentences.txt'
 FLUSH_SIZE = 100000
 BATCH_SIZE = 200
 
+
 def flush_queue(pairs, flush=False):
     """Write queue obects to file."""
 
@@ -25,6 +26,7 @@ def flush_queue(pairs, flush=False):
                 cfile.write(pair[0] + '\n')
                 efile.write(pair[1] + '\n')
 
+
 def errorify(tpl):
     """Function to use for multiprocessing."""
     # Unpack
@@ -37,6 +39,7 @@ def errorify(tpl):
 
     if pairs.qsize() > FLUSH_SIZE:
         flush_queue(pairs)
+
 
 def readn(file, n):
     """Read a file n lines at a time."""
@@ -72,6 +75,7 @@ def errorify_file(filename: str):
 
     # Flush anything remaining
     flush_queue(pairs, True)
+
 
 if __name__ == '__main__':
     errorify_file(sys.argv[1])

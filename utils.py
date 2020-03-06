@@ -3,6 +3,7 @@ import pickle
 import os
 from tqdm import tqdm
 
+
 class open_w():
     """Open a file for writing (overwrite) with encoding utf-8 in text mode.
         :param filename: Name of file
@@ -14,22 +15,27 @@ class open_w():
         self.filename = filename
         self.append = append
         self.fd = None
+
     def __enter__(self):
         self.fd = open(self.filename, 'w' if not self.append else 'a', encoding='utf-8')
         return self.fd
+
     def __exit__(self, type, value, traceback):
         print('Wrote ' + pretty.fname(self.fd.name))
         self.fd.close()
+
 
 def open_r(filename):
     """Open a file for reading with encoding utf-8 in text mode."""
     return open(filename, 'r', encoding='utf-8')
 
+
 def do_pickle(obj, filename, message="pickle", protocol=3):
     """Pickle an object and show a message."""
     pretty.start('Dumping ' + message + ' to ' + pretty.fname(filename))
-    pickle.dump(obj, open(filename, 'wb'),protocol=protocol)
+    pickle.dump(obj, open(filename, 'wb'), protocol=protocol)
     pretty.ok()
+
 
 def dump_text_to_list(filename, dump_path):
     """Dump space separated list of lists from text file to pickle."""
@@ -39,6 +45,7 @@ def dump_text_to_list(filename, dump_path):
         pickle.dump(edit_list, open(dump_path, "wb"))
         pretty.ok()
 
+
 def assert_fileexists(filename, info='data'):
     pretty.start('Checking for ' + pretty.fname(filename))
     if not os.path.exists(filename):
@@ -46,6 +53,7 @@ def assert_fileexists(filename, info='data'):
         pretty.fail('Fatal Error - FILE NOT FOUND')
         exit()
     pretty.ok()
+
 
 def read_file(filename, info='data'):
     pretty.start('Reading ' + info + ' from ' + pretty.fname(filename))
@@ -60,8 +68,10 @@ def read_file(filename, info='data'):
 
     return ans
 
+
 def read_file_lines(filename, info='data'):
     return read_file(filename, info).splitlines()
+
 
 class bcolors:
     HEADER = '\033[95m'
@@ -72,6 +82,7 @@ class bcolors:
     ENDC = '\033[0m'
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
+
 
 class pretty:
     @staticmethod
@@ -121,12 +132,12 @@ class pretty:
     @staticmethod
     def assert_in(a, b, message='Test'):
         """Assert if a is in b."""
-        return pretty.passert(a in b, message) 
+        return pretty.passert(a in b, message)
 
 
-def generator_based_read_file(filename, info='data',do_split=False,map_to_int=False):
-    batch_size=10000
-    #pretty.start('Reading ' + info + ' from ' + pretty.fname(filename))
+def generator_based_read_file(filename, info='data', do_split=False, map_to_int=False):
+    batch_size = 10000
+    # pretty.start('Reading ' + info + ' from ' + pretty.fname(filename))
     if not os.path.exists(filename):
         pretty.fail('NOT FOUND')
         pretty.fail('Fatal Error - FILE NOT FOUND')
@@ -134,26 +145,28 @@ def generator_based_read_file(filename, info='data',do_split=False,map_to_int=Fa
 
     with open_r(filename) as file:
         result = []
-        for i,line in enumerate(file):
+        for i, line in enumerate(file):
             out = line.strip()
             if do_split:
                 out = out.split()
             if map_to_int:
-                out = list(map(int,out))
+                out = list(map(int, out))
             result.append(out)
-            if i and i%(batch_size-1)==0:
+            if i and i % (batch_size - 1) == 0:
                 yield result
                 result = []
-        if len(result)>0:
+        if len(result) > 0:
             yield result
-        #pretty.ok()
+        # pretty.ok()
+
 
 def read_file_lines(filename, info='data'):
     return read_file(filename, info).splitlines()
 
+
 def custom_tokenize(sentence, tokenizer, mode="test"):
-    #tokenizes the sentences
-    #adds [CLS] (start) and [SEP] (end) token
-    tokenized = tokenizer.tokenize(sentence,mode)
+    # tokenizes the sentences
+    # adds [CLS] (start) and [SEP] (end) token
+    tokenized = tokenizer.tokenize(sentence, mode)
     tokenized = ["[CLS]"] + tokenized + ["[SEP]"]
     return tokenized

@@ -1,0 +1,9 @@
+This folder contains all the annotations used in the following paper.
+
+Please give a citation to the following paper if you make use of this annotated data set in your research:
+
+Christopher Bryant and Hwee Tou Ng. 2015. How far are we from fully automatic high quality grammatical error correction? In Proceedings of ACL.
+
+We have provided both the actual .m2 files used in the analysis, as well as the raw .sgml files produced by the annotators. The files are named according to the annotators mentioned in the paper.
+
+Any questions should be sent to bryant@comp.nus.edu.sg

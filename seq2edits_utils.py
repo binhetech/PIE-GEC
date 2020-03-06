@@ -2,8 +2,8 @@
 # Utilized by get_seq2edits.py
 # Provide diffs for a source and tagert sentence, 
 # by 
-    #1. breaking replace operations to deletes followed by inserts
-    #2. merging consecutive insert operations to a single insert operation
+# 1. breaking replace operations to deletes followed by inserts
+# 2. merging consecutive insert operations to a single insert operation
 # Uses edit-distance algoithm
 # With modified penalties for replace operations (Line 251, 312)
 
@@ -37,6 +37,7 @@ INSERT = 'insert'
 DELETE = 'delete'
 EQUAL = 'equal'
 REPLACE = 'replace'
+
 
 # Cost is basically: was there a match or not.
 # The other numbers are cumulative costs and matches.
@@ -74,6 +75,7 @@ def lowest_cost_action(ic, dc, sc, im, dm, sm, cost):
         best_action = DELETE
         best_match_count = dm
     return best_action
+
 
 def highest_match_action(ic, dc, sc, im, dm, sm, cost):
     """Given the following values, choose the action (insertion, deletion, or
@@ -248,16 +250,16 @@ def edit_distance(seq1, seq2, action_function=lowest_cost_action, test=operator.
         return n, 0
     if n == 0:
         return m, 0
-    v0 = [0] * (n + 1)     # The two 'error' columns
+    v0 = [0] * (n + 1)  # The two 'error' columns
     v1 = [0] * (n + 1)
-    m0 = [0] * (n + 1)     # The two 'match' columns
+    m0 = [0] * (n + 1)  # The two 'match' columns
     m1 = [0] * (n + 1)
     for i in range(1, n + 1):
         v0[i] = i
     for i in range(1, m + 1):
         v1[0] = i
         for j in range(1, n + 1):
-            cost = 0 if test(seq1[i - 1], seq2[j - 1]) else (1 + abs(len(seq1[i-1])-len(seq2[j-1]))/1000)
+            cost = 0 if test(seq1[i - 1], seq2[j - 1]) else (1 + abs(len(seq1[i - 1]) - len(seq2[j - 1])) / 1000)
             # The costs
             ins_cost = v1[j - 1] + 1
             del_cost = v0[j] + 1
@@ -265,7 +267,7 @@ def edit_distance(seq1, seq2, action_function=lowest_cost_action, test=operator.
             # Match counts
             ins_match = m1[j - 1]
             del_match = m0[j]
-            sub_match = m0[j - 1] + (1-cost)
+            sub_match = m0[j - 1] + (1 - cost)
 
             action = action_function(ins_cost, del_cost, sub_cost, ins_match,
                                      del_match, sub_match, cost)
@@ -318,16 +320,16 @@ def edit_distance_backpointer(seq1, seq2, action_function=lowest_cost_action, te
     for i in range(1, m + 1):
         for j in range(1, n + 1):
 
-            cost = 0 if test(seq1[i - 1], seq2[j - 1]) else (1 + abs(len(seq1[i-1])-len(seq2[j-1]))/1000)
+            cost = 0 if test(seq1[i - 1], seq2[j - 1]) else (1 + abs(len(seq1[i - 1]) - len(seq2[j - 1])) / 1000)
             # The costs of each action...
-            ins_cost = d[i][j - 1] + 1       # insertion
-            del_cost = d[i - 1][j] + 1       # deletion
+            ins_cost = d[i][j - 1] + 1  # insertion
+            del_cost = d[i - 1][j] + 1  # deletion
             sub_cost = d[i - 1][j - 1] + cost  # substitution/match
 
             # The match scores of each action
             ins_match = matches[i][j - 1]
             del_match = matches[i - 1][j]
-            sub_match = matches[i - 1][j - 1] + (1-cost)
+            sub_match = matches[i - 1][j - 1] + (1 - cost)
 
             action = action_function(ins_cost, del_cost, sub_cost, ins_match,
                                      del_match, sub_match, cost)
@@ -372,6 +374,7 @@ def get_opcodes_from_bp_table(bp):
     opcodes.reverse()
     return opcodes
 
+
 def ndiff(source, target, merge_insertions=True):
     sm = SequenceMatcher(source, target)
     opcodes = sm.get_opcodes()
@@ -379,43 +382,43 @@ def ndiff(source, target, merge_insertions=True):
     src_id = 0
     tgt_id = 0
     for item in opcodes:
-        if item[0]=='equal':
+        if item[0] == 'equal':
             diff.append("  {}".format(source[src_id]))
         elif item[0] == "insert":
             diff.append("+ {}".format(target[item[3]]))
-            tgt_id +=1
-            src_id -=1
-        elif item[0] == "replace": #BREAK a substitution to delete (-) followed by insert (+)
+            tgt_id += 1
+            src_id -= 1
+        elif item[0] == "replace":  # BREAK a substitution to delete (-) followed by insert (+)
             diff.append("- {}".format(source[src_id]))
             diff.append("+ {}".format(target[item[3]]))
         elif item[0] == "delete":
             diff.append("- {}".format(source[src_id]))
 
-        src_id +=1
-        tgt_id +=1
+        src_id += 1
+        tgt_id += 1
 
-    if merge_insertions: #merge insertions
+    if merge_insertions:  # merge insertions
         tmp = []
         for item in diff:
-            if item[0]!="+" or len(tmp)==0 or tmp[-1][0]!="+":
+            if item[0] != "+" or len(tmp) == 0 or tmp[-1][0] != "+":
                 tmp.append(item)
             else:
-                assert item[0]=="+"
-                assert tmp[-1][0]=="+"
+                assert item[0] == "+"
+                assert tmp[-1][0] == "+"
                 tmp[-1] = tmp[-1] + " " + item[2:]
 
         diff = tmp
     return diff
 
+
 if __name__ == "__main__":
-    x="I like him , also he like me ."
-    y="I like him . also , he like ."
+    x = "I like him , also he like me ."
+    y = "I like him . also , he like ."
 
-    print(ndiff(x.split(),y.split()))
+    print(ndiff(x.split(), y.split()))
 
-
-    x="I like him , also he like me ."
-    y="I like him . Also , he like me ."
+    x = "I like him , also he like me ."
+    y = "I like him . Also , he like me ."
 
     print("\n\n\n")
-    print(ndiff(x.split(),y.split()))
+    print(ndiff(x.split(), y.split()))
