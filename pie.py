@@ -221,18 +221,19 @@ class PieModel(object):
             idsList.append(token_ids)
         return tokensList, idsList
 
-    def get_feature(self, example):
+    def _get_feature(self, example):
+        """提取特征数据."""
         return sequence_padding(example, None, self.max_seq_length)
 
-    def create_generator(self):
-        """构建生成器"""
+    def _create_generator(self):
+        """构建数据输入的生成器."""
         while not self.closed:
-            features = (self.get_feature(f) for f in self.idsList)
+            features = (self._get_feature(f) for f in self.idsList)
             yield dict(zip(("input_sequence", "input_mask", "segment_ids", "edit_sequence"), zip(*features)))
 
     def input_fn_builder(self):
         """数据输入函数构建."""
-        dataset = tf.data.Dataset.from_generator(self.create_generator,
+        dataset = tf.data.Dataset.from_generator(self._create_generator,
                                                  output_types={'input_sequence': tf.int64,
                                                                'input_mask': tf.int64,
                                                                'segment_ids': tf.int64,
@@ -244,85 +245,7 @@ class PieModel(object):
                                                  )
         iterator = dataset.make_one_shot_iterator()
         dataset = iterator.get_next()
-        # return {'x': features}
         return dataset
-
-    def _input_fn_builder(self, idsList, max_seq_length, mode="predict"):
-        """
-        数据的输入函数构建.
-
-        Args:
-            idsList: list of list of int,
-            max_seq_length: int, 最大序列长度
-            mode: string, 构建输入函数的模式
-
-        Return:
-            input_fn
-
-        """
-        self.idsList = idsList
-
-        def create_int_feature(values):
-            # 特征数据格式转换为int64
-            f = tf.train.Feature(int64_list=tf.train.Int64List(value=list(values)))
-            return f
-
-        output_file = os.path.join(FLAGS.output_dir, "{}_{}.tf_record".format(mode, 0))
-        writer = tf.python_io.TFRecordWriter(output_file)
-
-        input_files = []
-        for example in idsList:
-            input_sequence, input_mask, segment_ids, edit_sequence = sequence_padding(example, None, max_seq_length)
-            features = collections.OrderedDict()
-            features["input_sequence"] = create_int_feature(input_sequence)
-            features["input_mask"] = create_int_feature(input_mask)
-            features["segment_ids"] = create_int_feature(segment_ids)
-            features["edit_sequence"] = create_int_feature(edit_sequence)
-            tf_example = tf.train.Example(features=tf.train.Features(feature=features))
-            input_files.append(features)
-            writer.write(tf_example.SerializeToString())
-
-        # 特征名匹配词典
-        name_to_features = {
-            "input_sequence": tf.FixedLenFeature([max_seq_length], tf.int64),  # 固定长度的tensor
-            "input_mask": tf.FixedLenFeature([max_seq_length], tf.int64),
-            "segment_ids": tf.FixedLenFeature([max_seq_length], tf.int64),
-            "edit_sequence": tf.FixedLenFeature([max_seq_length], tf.int64),
-        }
-
-        # input_files = get_matching_files(FLAGS.output_dir + "/" + "{}_*.tf_record".format(mode))
-
-        def _decode_record(record, name_to_features):
-            """
-            Decodes a record to a TensorFlow example.
-            将一个tf record转换成为一个tf.Example.
-            """
-            example = tf.parse_single_example(record, name_to_features)
-            # tf.Example only supports tf.int64, but the TPU only supports tf.int32.
-            # So cast all int64 to int32.
-            if FLAGS.use_tpu:
-                # 把所有int64数据转为int32, 因为TPU只支持tf.int32
-                for name in list(example.keys()):
-                    t = example[name]
-                    if t.dtype == tf.int64:
-                        t = tf.to_int32(t)
-                    example[name] = t
-            return example
-
-        def input_fn(params):
-            """
-            The actual input function. 输入函数
-            """
-            batch_size = params["batch_size"]
-            # For training, we want a lot of parallel reading and shuffling.
-            # For eval, we want no shuffling and parallel reading doesn't matter.
-            d = tf.data.Dataset.from_generator(input_files)
-            d = d.apply(tf.contrib.data.map_and_batch(lambda record: _decode_record(record, name_to_features),
-                                                      batch_size=batch_size,
-                                                      drop_remainder=self.predict_drop_remainder))
-            return d
-
-        return input_fn
 
     def clean_up_tokenization(self, text):
         """Clean up a list of simple English tokenization artifacts like spaces before punctuations and abreviated forms."""
@@ -354,12 +277,11 @@ class PieModel(object):
             corSentences: list of string, 纠错后的句子列表
 
         """
-        # 对句子列表进行token化
         if doSpellCheck is None:
             doSpellCheck = self.do_spell_check
-        tokensList, idsList = self._word_tokenize(sentences, doSpellCheck)
+        # 对句子列表进行token化
+        tokensList, self.idsList = self._word_tokenize(sentences, doSpellCheck)
         # 构造输入函数
-        self.idsList = idsList
         if self.first_run:
             self.predictions = self.estimator.predict(input_fn=self.input_fn_builder,
                                                       checkpoint_path=FLAGS.predict_checkpoint,
@@ -395,17 +317,17 @@ class PieModel(object):
         """
         tStart = time.time()
         if doSentToken:
-            sentences = sent_tokenize(text)
+            oriSentences = sent_tokenize(text)
         else:
-            sentences = [text]
+            oriSentences = [text]
         # multi round
+        corSentences = oriSentences.copy()
         for i in range(4):
             if i > 0:
                 doSpellCheck = False
-            # print("i={}, sentence={}".format(i, sentences))
-            sentences = self.predict_sentences(sentences, doSpellCheck, doCleanUp)
-        rslt = sentences
-        result = {"text": text, "correction": hypen.join(rslt), "sentences": sentences, "corSent": rslt,
+            corSentences = self.predict_sentences(corSentences, doSpellCheck, doCleanUp)
+        result = {"text": text, "correction": hypen.join(corSentences), "sentences": oriSentences,
+                  "corSent": corSentences,
                   "code": 0, "time": time.time() - tStart}
         return result
 
