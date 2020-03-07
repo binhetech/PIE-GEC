@@ -51,7 +51,13 @@ class FlaskApp(Flask):
 
         """
         super(FlaskApp, self).__init__(*args, **kwargs)
-        self.corrector = PieModel()
+        self.corrector = PieModel(vocab_file="./resources/configs/vocab.txt",
+                                  bert_config_file="./resources/configs/bert_config.json",
+                                  path_inserts="./resources/models/conll/common_inserts.p",
+                                  path_deletes="./resources/models/conll/common_deletes.p",
+                                  path_multitoken_inserts="./resources/models/conll/common_multitoken_inserts.p",
+                                  predict_checkpoint="./resources/models/pie_model.ckpt",
+                                  output_dir="./resources/models", max_seq_length=128, use_tpu=False, inferMode="conll")
         # 获取日志存储工具
         self.logger = logging.getLogger('algorithm_nlp_basic_writing_grammarCorrect')
         self.logger.setLevel(logging.INFO)

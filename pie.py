@@ -14,23 +14,22 @@
 
 
 """
+import sys
+
+sys.path.append("./word_edit")
 
 import pickle
-import time
 import tensorflow as tf
 from tensorflow.contrib.distribute import AllReduceCrossDeviceOps
-from tensorflow.python.lib.io.file_io import get_matching_files
-import os
 from nltk import sent_tokenize
-import collections
 
-import wem_utils
-import modeling
-from word_edit_model import FLAGS, sequence_padding, gec_model_fn_builder
-from tokenization import FullTokenizer
-from tokenize_input import get_tuple
-from opcodes import Opcodes
-from apply_opcode import apply_opcodes
+from word_edit.wem_utils import list_to_ids
+from word_edit.modeling import BertConfig
+from word_edit.word_edit_model import FLAGS, sequence_padding, gec_model_fn_builder
+from word_edit.tokenization import FullTokenizer
+from word_edit.tokenize_input import get_tuple
+from word_edit.opcodes import Opcodes
+from word_edit.apply_opcode import apply_opcodes
 
 
 class PieModel(object):
@@ -51,7 +50,8 @@ class PieModel(object):
                  path_deletes="./resources/models/conll/common_deletes.p",
                  path_multitoken_inserts="./resources/models/conll/common_multitoken_inserts.p",
                  predict_checkpoint="./resources/models/pie_model.ckpt",
-                 output_dir="./resources/models", max_seq_length=128, use_tpu=False, inferMode="conll"):
+                 output_dir="./resources/models", max_seq_length=128, use_tpu=False, numGpu=2, inferMode="conll",
+                 doSpellCheck=True):
         """
         初始化方法.
 
@@ -63,8 +63,10 @@ class PieModel(object):
             path_multitoken_inserts: string, 多token插入文件路径
             predict_checkpoint: string, 预测模型文件路径
             max_seq_length: int, 最大序列长度
-            use_tpu: boolean, 是否使用tpu
+            use_tpu: boolean, 是否使用tpu，默认不使用tpu, 而是使用GPU运算(当无gpu设备时切换至cpu运算)
+            numGpu: int, GPU使用个数，仅当开启gpu运算且GPU可用的情况下使用
             inferMode: string, 推理模式，包括："conll", "bea"
+            doSpellCheck: boolean, 是否先进行简单拼写检查
 
         Return:
             None
@@ -82,10 +84,11 @@ class PieModel(object):
         FLAGS.output_dir = output_dir
         FLAGS.max_seq_length = max_seq_length
         FLAGS.use_tpu = use_tpu
+        FLAGS.n_gpus = numGpu
         FLAGS.init_checkpoint = False
         self.use_tpu = use_tpu
         self.max_seq_length = max_seq_length
-        self.do_spell_check = True
+        self.do_spell_check = doSpellCheck
         self.inferMode = inferMode
         # 构建tokenizer对象
         self.tokenizer = FullTokenizer(vocab_file=FLAGS.vocab_file, do_lower_case=FLAGS.do_lower_case)
@@ -97,6 +100,9 @@ class PieModel(object):
         self.first_run = True
         self.predictions = None
         self.closed = False
+        # 第一次运行检查
+        self._first_check()
+        return
 
     def _loading_estimator(self, FLAGS):
         """
@@ -112,7 +118,7 @@ class PieModel(object):
             raise ValueError("At least one of `do_train`, `do_eval` or `do_predict' must be True.")
         self.predict_drop_remainder = True if FLAGS.use_tpu else False
         # bert配置文件
-        bert_config = modeling.BertConfig.from_json_file(FLAGS.bert_config_file)
+        bert_config = BertConfig.from_json_file(FLAGS.bert_config_file)
         if FLAGS.max_seq_length > bert_config.max_position_embeddings:
             raise ValueError(
                 "Cannot use sequence length %d because the BERT model was only trained up to sequence length %d" % (
@@ -123,7 +129,7 @@ class PieModel(object):
         insert_ids = self.tokenizer.convert_tokens_to_ids(inserts)
         # 读取：多token插入编辑
         multitoken_inserts = pickle.load(tf.gfile.Open(FLAGS.path_multitoken_inserts, "rb"))
-        multitoken_insert_ids = wem_utils.list_to_ids(multitoken_inserts, self.tokenizer)
+        multitoken_insert_ids = list_to_ids(multitoken_inserts, self.tokenizer)
 
         num_train_steps = None
         num_warmup_steps = None
@@ -145,8 +151,7 @@ class PieModel(object):
             multitoken_insert_ids=multitoken_insert_ids,
             subtract_replaced_from_replacement=FLAGS.subtract_replaced_from_replacement, )
 
-        # If TPU is not available, this will fall back to normal Estimator on CPU
-        # or GPU.
+        # If TPU is not available, this will fall back to normal Estimator on CPU or GPU.
         if FLAGS.use_tpu:
             # 1.创建tpu集群
             tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(FLAGS.tpu_name,
@@ -289,6 +294,7 @@ class PieModel(object):
             self.first_run = False
         # 解析纠错结果
         corSentences = []
+        # next generator
         prediction = next(self.predictions)
         for i in range(len(sentences)):
             editList = [edit for edit in prediction["predictions"][i] if edit > 0]
@@ -302,41 +308,41 @@ class PieModel(object):
             corSentences.append(corSent)
         return corSentences
 
-    def correct(self, text, lang="en", mode="grammar", hypen=" ", doSentToken=True, doSpellCheck=None, doCleanUp=True):
+    def _first_check(self):
+        """开始第一次检查句子以加载模型到内存中."""
+        self.correct("Jack is the writer who have liveed in the beijing citys.")
+        return
+
+    def correct(self, text, lang="en", mode="grammar", hyphen=" ", doSentToken=True, doSpellCheck=None, numRound=4,
+                doCleanUp=True):
         """
         针对输入错误的文本进行语法纠错.
 
         Args:
             text: string, 输入的纠错文本
-            hypen: string, 句子链接字符，默认为空格
+            lang: string, 输入文本的语言，目前只支持"en"
+            mode: string, 纠错模式，目前无用
+            hyphen: string, 句子链接字符，默认为空格
+            doSentToken: boolean, 是否先对输入文件进行分句，默认true
             doSpellCheck: boolean, 是否先进行简单拼写检查
+            numRound: int, 迭代编辑次数
             doCleanUp: boolean, 是否进行空格及特殊字符的缩进处理
 
         Return:
 
         """
-        tStart = time.time()
         if doSentToken:
             oriSentences = sent_tokenize(text)
         else:
             oriSentences = [text]
         # multi round
         corSentences = oriSentences.copy()
-        for i in range(4):
+        for i in range(numRound):
             if i > 0:
+                # 只在第一次进行拼写检查
                 doSpellCheck = False
             corSentences = self.predict_sentences(corSentences, doSpellCheck, doCleanUp)
-        result = {"text": text, "correction": hypen.join(corSentences), "sentences": oriSentences,
-                  "corSent": corSentences,
-                  "code": 0, "time": time.time() - tStart}
+        # 构建结果输出
+        result = {"text": text, "correction": hyphen.join(corSentences), "sentences": oriSentences,
+                  "corSent": corSentences, "code": 0, }
         return result
-
-    def close(self):
-        self.closed = True
-
-
-if __name__ == "__main__":
-    pie = PieModel()
-    text = "With the development of the TV, there is an problems. Joel is the writer who have liveed in beijing city."
-    result = pie.correct(text)
-    print(result)

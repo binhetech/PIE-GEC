@@ -1,14 +1,10 @@
 """Utility to apply opcodes to incorrect sentences."""
 
-import pickle
-import string
-import sys
 from tqdm import tqdm
 from joblib import Parallel, delayed
 import opcodes
 from utils import open_w, read_file_lines, pretty, bcolors
 from transform_suffixes import apply_transform as apply_suffix_transform
-from autocorrect import spell
 import tokenization
 import argparse
 
@@ -202,12 +198,6 @@ def join_subwords(word_list, INFER_MODE):
 
     return post_process_result
 
-    '''
-    elif len(result) > 1 and word=="t" and result[-1]=="'" and result[-2]=="n":
-        result.pop()
-        result[-1]="n't"
-    '''
-
 
 def split_and_convert_to_ints(words_uncorrected, edits):
     words_uncorrected = words_uncorrected.split(' ')
@@ -234,7 +224,8 @@ if __name__ == "__main__":
 
     vocab = tokenization.load_vocab(FLAGS.vocab_path)
     basic_tokenizer = tokenization.BasicTokenizer(do_lower_case=False, vocab=vocab)
-    opcodes = opcodes.Opcodes(FLAGS.path_common_inserts, FLAGS.path_common_deletes, FLAGS.path_common_multitoken_inserts)
+    opcodes = opcodes.Opcodes(FLAGS.path_common_inserts, FLAGS.path_common_deletes,
+                              FLAGS.path_common_multitoken_inserts)
 
     corrected = []
 

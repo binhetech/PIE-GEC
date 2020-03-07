@@ -10,7 +10,10 @@ class Opcodes(object):
         print("path_common_deletes: {}".format(path_common_deletes))
         print("path_common_multitoken_inserts: {}".format(path_common_multitoken_inserts))
         common_inserts = pickle.load(open(path_common_inserts, "rb"))
-        self.common_deletes = pickle.load(open(path_common_deletes, "rb"))
+        if path_common_deletes:
+            self.common_deletes = pickle.load(open(path_common_deletes, "rb"))
+        else:
+            self.common_deletes = None
         common_multitoken_inserts = pickle.load(open(path_common_multitoken_inserts, "rb"))
 
         self.UNK = 0  # dummy

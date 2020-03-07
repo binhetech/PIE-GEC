@@ -29,6 +29,7 @@ wordpiece_tokenizer = tokenization.FullTokenizer(FLAGS.vocab_path, do_lower_case
 
 opcodes = Opcodes(
     path_common_inserts=os.path.join(FLAGS.common_inserts_dir, "common_inserts.p"),
+    path_common_deletes=None,
     path_common_multitoken_inserts=os.path.join(FLAGS.common_inserts_dir, "common_multitoken_inserts.p"),
     use_transforms=True)
 
