@@ -936,11 +936,10 @@ def main(_):
     # train on train set在训练集上进行训练
     if FLAGS.do_train:
         train_record_dir = FLAGS.output_dir
-        if FLAGS.create_train_tf_records:
-            # 1、基于文件将样本对象转换为特征对象，并存储TF Records格式的文件
-            train_examples = processor.get_train_examples(FLAGS.data_dir)
-            gec_file_based_convert_examples_to_features(train_examples, FLAGS.max_seq_length, train_record_dir, "train",
-                                                        num_train_examples)
+        # 1、基于文件将样本对象转换为特征对象，并存储TF Records格式的文件
+        train_examples = processor.get_train_examples(FLAGS.data_dir)
+        gec_file_based_convert_examples_to_features(train_examples, FLAGS.max_seq_length, train_record_dir, "train",
+                                                    num_train_examples)
         tf.logging.info("***** Running training *****")
         tf.logging.info("  Num examples = %d", num_train_examples)
         tf.logging.info("  Batch size = %d", FLAGS.train_batch_size)
@@ -957,6 +956,7 @@ def main(_):
     if FLAGS.do_eval:
         eval_examples = processor.get_dev_examples(FLAGS.data_dir)
         num_eval_examples = get_file_length(os.path.join(FLAGS.data_dir, "dev_labels.txt"))
+
         # 1、基于文件将样本对象转换为特征对象，并存储TF Records格式的文件
         gec_file_based_convert_examples_to_features(eval_examples, FLAGS.max_seq_length, FLAGS.output_dir, "eval",
                                                     num_eval_examples)
@@ -994,32 +994,31 @@ def main(_):
         print("num of test_examples: {}".format(num_test_examples))
         num_actual_predict_examples = num_test_examples
 
-        if FLAGS.create_predict_tf_records:
-            # 创建tf records
-            predict_examples = processor.get_test_examples(FLAGS.data_dir)
-            if FLAGS.use_tpu:
-                # Warning: According to tpu_estimator.py Prediction on TPU is an
-                # experimental feature and hence not supported here
-                # raise ValueError("Prediction in TPU not supported")
-                padded_examples = []
-                # 计算需要padding填充的样本个数
-                while num_test_examples % FLAGS.predict_batch_size != 0:
-                    padded_examples.append(PaddingInputExample())
-                    num_test_examples += 1
-                # 填充虚假fake样本
-                iterables = [predict_examples, padded_examples]
-                predict_examples = chain()
-                for iterable in iterables:
-                    predict_examples = chain(predict_examples, iterable)
+        # 创建tf records
+        predict_examples = processor.get_test_examples(FLAGS.data_dir)
+        if FLAGS.use_tpu:
+            # Warning: According to tpu_estimator.py Prediction on TPU is an
+            # experimental feature and hence not supported here
+            # raise ValueError("Prediction in TPU not supported")
+            padded_examples = []
+            # 计算需要padding填充的样本个数
+            while num_test_examples % FLAGS.predict_batch_size != 0:
+                padded_examples.append(PaddingInputExample())
+                num_test_examples += 1
+            # 填充虚假fake样本
+            iterables = [predict_examples, padded_examples]
+            predict_examples = chain()
+            for iterable in iterables:
+                predict_examples = chain(predict_examples, iterable)
 
-            # 1、基于文件将样本对象转换为特征对象，并存储TF Records格式的文件
-            gec_file_based_convert_examples_to_features(predict_examples, FLAGS.max_seq_length, FLAGS.output_dir,
-                                                        "predict", num_test_examples)
+        # 1、基于文件将样本对象转换为特征对象，并存储TF Records格式的文件
+        gec_file_based_convert_examples_to_features(predict_examples, FLAGS.max_seq_length, FLAGS.output_dir,
+                                                    "predict", num_test_examples)
 
-            tf.logging.info("***** Running prediction*****")
-            tf.logging.info("  Num examples = %d (%d actual, %d padding)", num_test_examples,
-                            num_actual_predict_examples, num_test_examples - num_actual_predict_examples)
-            tf.logging.info("  Batch size = %d", FLAGS.predict_batch_size)
+        tf.logging.info("***** Running prediction*****")
+        tf.logging.info("  Num examples = %d (%d actual, %d padding)", num_test_examples,
+                        num_actual_predict_examples, num_test_examples - num_actual_predict_examples)
+        tf.logging.info("  Batch size = %d", FLAGS.predict_batch_size)
 
         predict_drop_remainder = True if FLAGS.use_tpu else False
         # 2、构建特征输入函数
