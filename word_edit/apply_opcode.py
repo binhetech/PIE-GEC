@@ -35,8 +35,7 @@ def apply_opcodes(words_uncorrected, ops_to_apply, opcodes, basic_tokenizer, INF
                   join_wordpiece_subwords=True, remove_start_end_tokens=True,
                   do_spell_check=True, apply_only_first_edit=False,
                   use_common_deletes=True):
-    """Applies opcodes to an uncorrected token sequence and returns
-    corrected token sequence."""
+    """Applies opcodes to an uncorrected token sequence and returns corrected token sequence."""
     # Initialize
     words_corrected = []
 
@@ -53,34 +52,34 @@ def apply_opcodes(words_uncorrected, ops_to_apply, opcodes, basic_tokenizer, INF
             print("ERROR: EOS opcode:  This should not happen")
             exit(1)
             break
-
         elif op == opcodes.CPY:
+            # 执行复制操作
             words_corrected.append(words_uncorrected[i])
-
         elif op == opcodes.DEL:
+            # 执行删除操作
             if (words_uncorrected[i] in opcodes.common_deletes) or (not use_common_deletes):
                 # and (i==len(words_uncorrected) or words_uncorrected[i+1][0:2]!="##")):
                 continue
             else:
                 words_corrected.append(words_uncorrected[i])
-
         elif op in opcodes.APPEND.values():
+            # 执行追加操作
             words_corrected.append(words_uncorrected[i])
             insert_words = key_from_val(op, opcodes.APPEND).split()
             if i == 0 and do_spell_check:
+                # 首字母大写
                 insert_words[0] = insert_words[0].capitalize()
                 if len(words_uncorrected) > 1:
                     words_uncorrected[i + 1] = words_uncorrected[i + 1].lower()
             words_corrected.extend(insert_words)
-
         elif op in opcodes.REP.values():
+            # 执行替换操作
             replacement = key_from_val(op, opcodes.REP).split()
             words_corrected.extend(replacement)
-
         elif apply_suffix_transform(words_uncorrected, i, op, opcodes):
+            # 执行词缀转换操作
             replacement = apply_suffix_transform(words_uncorrected, i, op, opcodes)
             words_corrected.append(replacement)
-
         else:
             words_corrected.append(words_uncorrected[i])
             tqdm.write(bcolors.FAIL + 'ERROR: Copying illegal operation (failed transform?) at '

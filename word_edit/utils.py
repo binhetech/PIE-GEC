@@ -1,14 +1,11 @@
 """Helper utilities."""
 import pickle
 import os
-from tqdm import tqdm
 
 
-class open_w():
-    """Open a file for writing (overwrite) with encoding utf-8 in text mode.
-        :param filename: Name of file
-        :param append: Opens the file for appending if true
-        :return: file handle
+class open_w(object):
+    """
+    Open a file for writing (overwrite) with encoding utf-8 in text mode.
     """
 
     def __init__(self, filename, append=False):
@@ -74,6 +71,7 @@ def read_file_lines(filename, info='data'):
 
 
 class bcolors:
+    # back end 终端显示颜色
     HEADER = '\033[95m'
     OKBLUE = '\033[94m'
     OKGREEN = '\033[92m'
@@ -158,10 +156,6 @@ def generator_based_read_file(filename, info='data', do_split=False, map_to_int=
         if len(result) > 0:
             yield result
         # pretty.ok()
-
-
-def read_file_lines(filename, info='data'):
-    return read_file(filename, info).splitlines()
 
 
 def custom_tokenize(sentence, tokenizer, mode="test"):
