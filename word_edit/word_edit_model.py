@@ -11,63 +11,41 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import collections
-import csv
 import os
-
-import modeling
-import modified_modeling  # obtains contextual embeddings
-#                         for appends and replacements
-#                         for edit factorized architecture
-#                         figure 2 in the paper
-import optimization
-import tokenization
-import tensorflow as tf
+import csv
+import collections
 import pickle
 import numpy as np
+import tensorflow as tf
 from itertools import chain
 from tensorflow.python.lib.io.file_io import get_matching_files
-from modeling import get_shape_list
 from tensorflow.contrib.distribute import AllReduceCrossDeviceOps
+
+import modeling
+# obtains contextual embeddings for appends and replacements for edit factorized architecture figure 2 in the paper
+import modified_modeling
+import optimization
+import tokenization
 import custom_optimization
 import wem_utils
 
 flags = tf.flags
-FLAGS = flags.FLAGS
 
 ## Required parameters
-flags.DEFINE_string(
-    "data_dir", None,
-    "The input data dir. Should contain the .txt files (or other data files) "
-    "for the task.")
-
-flags.DEFINE_string(
-    "bert_config_file", None,
-    "The config json file corresponding to the pre-trained BERT model. "
-    "This specifies the model architecture.")
-
-flags.DEFINE_string("vocab_file", None,
-                    "The vocabulary file that the BERT model was trained on.")
+flags.DEFINE_string("data_dir", None,
+                    "The input data dir. Should contain the .txt files (or other data files) for the task.")
+flags.DEFINE_string("bert_config_file", None,
+                    "The config json file corresponding to the pre-trained BERT model. This specifies the model architecture.")
+flags.DEFINE_string("vocab_file", None, "The vocabulary file that the BERT model was trained on.")
 # 模型检查点保存的输出目录
-flags.DEFINE_string(
-    "output_dir", None,
-    "The output directory where the model checkpoints will be written.")
-
+flags.DEFINE_string("output_dir", None, "The output directory where the model checkpoints will be written.")
 ## Other parameters
-
 flags.DEFINE_string("init_checkpoint", None, "Initial checkpoint (usually from a pre-trained BERT model).")
-
-flags.DEFINE_bool(
-    "do_lower_case", True,
-    "Whether to lower case the input text. Should be True for uncased "
-    "models and False for cased models.")
-
-flags.DEFINE_integer(
-    "max_seq_length", 128,
-    "The maximum total input sequence length after WordPiece tokenization. "
-    "Sequences longer than this will be truncated, and sequences shorter "
-    "than this will be padded.")
-
+flags.DEFINE_bool("do_lower_case", False,
+                  "Whether to lower case the input text. Should be True for uncased models and False for cased models.")
+flags.DEFINE_integer("max_seq_length", 128,
+                     "The maximum total input sequence length after WordPiece tokenization. Sequences longer than this will be truncated, and sequences shorter than this will be padded.")
+# 训练参数
 flags.DEFINE_bool("do_train", False, "Whether to run training.")
 flags.DEFINE_bool("do_eval", False, "Whether to run eval on the dev set.")
 flags.DEFINE_bool("do_predict", False, "Whether to run the model in inference mode on the test set.")
@@ -77,37 +55,22 @@ flags.DEFINE_integer("predict_batch_size", 512, "Total batch size for predict.")
 flags.DEFINE_float("learning_rate", 5e-5, "The initial learning rate for Adam.")
 flags.DEFINE_float("num_train_epochs", 3.0, "Total number of training epochs to perform.")
 # 在warm up热身阶段执行线性学习率进行训练的样本比例:10%
-flags.DEFINE_float(
-    "warmup_proportion", 0.1,
-    "Proportion of training to perform linear learning rate warmup for. "
-    "E.g., 0.1 = 10% of training.")
-
+flags.DEFINE_float("warmup_proportion", 0.1,
+                   "Proportion of training to perform linear learning rate warmup for. E.g., 0.1 = 10% of training.")
 # 保存模型检查点的频率：1000steps
 flags.DEFINE_integer("save_checkpoints_steps", 1000, "How often to save the model checkpoint.")
 flags.DEFINE_integer("iterations_per_loop", 1000, "How many steps to make in each estimator call.")
-
 # 设置是否使用TPU，或者GPU训练
 flags.DEFINE_bool("use_tpu", False, "Whether to use TPU or GPU/CPU.")
 flags.DEFINE_bool("use_gpu", True, "Whether to use GPU.")
 flags.DEFINE_integer("num_tpu_cores", 8, "Only used if `use_tpu` is True. Total number of TPU cores to use.")
 flags.DEFINE_integer("n_gpus", 2, "Only used if `use_gpu` is True. Total number of GPU cores to use.")
-flags.DEFINE_string(
-    "tpu_name", None,
-    "The Cloud TPU to use for training. This should be either the name "
-    "used when creating the Cloud TPU, or a grpc://ip.address.of.tpu:8470 "
-    "url.")
-flags.DEFINE_string(
-    "tpu_zone", None,
-    "[Optional] GCE zone where the Cloud TPU is located in. If not "
-    "specified, we will attempt to automatically detect the GCE project from "
-    "metadata.")
-
-flags.DEFINE_string(
-    "gcp_project", None,
-    "[Optional] Project name for the Cloud TPU-enabled project. If not "
-    "specified, we will attempt to automatically detect the GCE project from "
-    "metadata.")
-
+flags.DEFINE_string("tpu_name", None,
+                    "The Cloud TPU to use for training. This should be either the name used when creating the Cloud TPU, or a grpc://ip.address.of.tpu:8470 url.")
+flags.DEFINE_string("tpu_zone", None,
+                    "[Optional] GCE zone where the Cloud TPU is located in. If not specified, we will attempt to automatically detect the GCE project from metadata.")
+flags.DEFINE_string("gcp_project", None,
+                    "[Optional] Project name for the Cloud TPU-enabled project. If not specified, we will attempt to automatically detect the GCE project from metadata.")
 flags.DEFINE_string("master", None, "[Optional] TensorFlow master URL.")
 flags.DEFINE_float("copy_weight", 1, "weight to copy")
 flags.DEFINE_bool("use_bert_more", True, "use bert more exhaustively for logit computation")
@@ -119,9 +82,10 @@ flags.DEFINE_string("predict_checkpoint", None, "checkpoint to use for predictio
 flags.DEFINE_integer("random_seed", 0, "random seed for creating random initializations")
 flags.DEFINE_bool("create_train_tf_records", True, "whether to create train tf records")
 flags.DEFINE_bool("create_predict_tf_records", True, "whether to create predict tf records")
-
-
 # flags.DEFINE_bool("dump_probs", False, "dump edit probs to numpy file while decoding")
+
+FLAGS = flags.FLAGS
+
 
 class PaddingInputExample(object):
     """

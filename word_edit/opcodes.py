@@ -214,11 +214,11 @@ class Opcodes(object):
         if word not in self.APPEND:
             self.APPEND[word] = len(self.APPEND) + self.APPEND_BEGIN
         else:
-            print("Skipping duplicate opcode", word)
+            print("Skipping APPEND opcode: {}".format(word))
 
     def reg_rep(self, word):
         # registers a REPLACE
         if word not in self.REP:
             self.REP[word] = len(self.REP) + len(self.APPEND) + self.APPEND_BEGIN
         else:
-            print("Skipping duplicate opcode", word)
+            print("Skipping REPLACE opcode: {}".format(word))
