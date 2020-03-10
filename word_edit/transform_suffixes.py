@@ -495,7 +495,7 @@ def apply_transform(uncorrected, uposition, opcode, opcodes):
     return art.apply()
 
 
-class ApplySuffixTransorm():
+class ApplySuffixTransorm(object):
 
     def __init__(self, uncorrected, uposition, opcode, opcodes):
         """Tries to apply an opcode to a word or returns None

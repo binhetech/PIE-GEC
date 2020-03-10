@@ -8,14 +8,14 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import six
 import collections
 import unicodedata
-import six
 import tensorflow as tf
+import re
 
 from autocorrect import Speller
 from spellcheck_utils import can_spellcheck
-import re
 
 special_tokens = {"n't": "not", "'m": "am", "ca": "can", "Ca": "Can", "wo": "would", "Wo": "Would",
                   "'ll": "will", "'ve": "have"}
@@ -156,12 +156,6 @@ def spell_check(text):
         return None
     result = spell(text)
     return result
-    '''
-    if (text[0].isupper() == result[0].isupper()): #avoid case change due to spelling correction
-      return result
-    else:
-      return None
-    '''
 
 
 def check_alternate_in_vocab(word, vocab):
