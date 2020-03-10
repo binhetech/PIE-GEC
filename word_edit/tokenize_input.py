@@ -15,9 +15,22 @@ def add_arguments(parser):
     parser.add_argument("--output_token_ids", type=str, required=True, help="token ids corresponding to output_tokens")
     parser.add_argument("--vocab_path", type=str, required=True, help="path to bert's cased vocab file")
     parser.add_argument("--do_spell_check", type="bool", default=False, help="whether to spell check words")
+    parser.add_argument("--verbose", type="bool", default=False, help="whether to print log")
 
 
 def get_tuple(wordpiece_tokenizer, line, do_spell_check):
+    """
+    进行tokenize.
+
+    Args:
+        wordpiece_tokenizer: class, tokenizer
+        line: string, 输入文本
+        do_spell_check: boolean, 是否进行autocorrect的拼写检查
+
+    Return:
+        tokens, token_ids
+
+    """
     if do_spell_check:
         line = line.strip().split()
         line = wordpiece_tokenizer.basic_tokenizer._run_spell_check(line)
@@ -48,7 +61,7 @@ if __name__ == "__main__":
     add_arguments(parser)
     FLAGS, _ = parser.parse_known_args()
 
-    if FLAGS.do_spell_check:
+    if FLAGS.do_spell_check and FLAGS.verbose:
         print("\n\n******************* DOING SPELL CHECK while tokenizing input *******************\n\n")
     else:
         print("\n\n********************* Skipping Spell Check while tokenizing input *******************\n\n")
