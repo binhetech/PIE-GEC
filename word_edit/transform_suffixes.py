@@ -1,10 +1,9 @@
 """Transform functions for replace."""
-import pickle
 
 
 def is_append_suffix(suffix, w1, w2):
-    l = len(suffix)
-    if (w2[-l:] == suffix) and (w1 == w2[:-l]):
+    lenSuf = len(suffix)
+    if (w2[-lenSuf:] == suffix) and (w1 == w2[:-lenSuf]):
         return True
     else:
         return False
@@ -21,74 +20,92 @@ def is_transform_suffix(suffix_1, suffix_2, w1, w2):
 
 
 def append_suffix(word, suffix):
-    # print("word: {}, suffix: {}".format(word, suffix))
+    """
+    在单词后添加词缀.
 
+    Args:
+        word: string, 输入单词
+        suffix: string, 词缀
+
+    Return:
+        修改后的单词
+
+    """
     if len(word) == 1:
         print(
             "We currently fear appending suffix: {} to a one letter word, but still doing it: {}".format(suffix, word))
-        # return word
-
-    l = len(suffix)
-
-    # if word[-l:] == suffix:
-    # print("**** WARNING: SUFFIX: {} ALREADY PRESENT in WORD, BUT still adding it: {} ****".format(suffix, word))
-
     if word[-1] == "s" and suffix == "s":
         return word + "es"
-
-    if word[-1] == "y" and suffix == "s" and len(word) > 2:
+    elif word[-1] == "y" and suffix == "s" and len(word) > 2:
         if word[-2] not in ["a", "e", "i", "o", "u"]:
             return word[0:-1] + "ies"
-
-    # if word[-1] == "h" and suffix == "s":
-    #    return word + "es"
-
-    # if word[-1] == "t" and suffix == "d":
-    #    return word + "ed"
-
-    # if word[-1] == "k" and suffix == "d":
-    #    return word + "ed"    
-
-    return word + suffix
+    else:
+        return word + suffix
 
 
 def remove_suffix(word, suffix):
+    """
+    去掉单词的词缀.
+
+    Args:
+        word: string, 输入单词
+        suffix: string, 词缀
+
+    Return:
+        修改后的单词
+
+    """
     if len(suffix) > len(word):
         print("suffix: {} to be removed has larger length than word: {}".format(suffix, word))
         return word
-
-    l = len(suffix)
-
-    if word[-l:] == suffix:
-        return word[:-l]
+    lenSuf = len(suffix)
+    if word[-lenSuf:] == suffix:
+        return word[:-lenSuf]
     else:
         print("**** WARNING: SUFFIX : {} NOT PRESENT in WORD: {} ****".format(suffix, word))
         return word
 
 
-def transform_suffix(word, suffix_1, suffix_2):
-    if len(suffix_1) > len(word):
-        print("suffix: {} to be replaced has larger length than word: {}".format(suffix_1, word))
+def transform_suffix(word, suffixLeft, suffixRight):
+    """
+    单词的词缀转换.
+
+    Args:
+        word: string, 输入单词
+        suffixLeft: string, 左词缀
+        suffixRight: string, 右词缀
+
+    Return:
+        修改后的单词
+
+    """
+    if len(suffixLeft) > len(word):
+        print("suffix: {} to be replaced has larger length than word: {}".format(suffixLeft, word))
         return word
-
-    l1 = len(suffix_1)
-    l2 = len(suffix_2)
-
-    if word[-l1:] == suffix_1:
-        return word[:-l1] + suffix_2
+    lenLeft = len(suffixLeft)
+    if word[-lenLeft:] == suffixLeft:
+        return word[:-lenLeft] + suffixRight
     else:
-        print("transform")
-        print("**** WARNING: SUFFIX : {} NOT PRESENT in WORD: {} ****".format(suffix_1, word))
+        print("transform\n**** WARNING: SUFFIX : {} NOT PRESENT in WORD: {} ****".format(suffixLeft, word))
         return word
 
 
-class SuffixTransform():
-    """Helper to find if a replacement in a sentence matches a predefined transform."""
+class SuffixTransform(object):
+    """
+    Helper to find if a replacement in a sentence matches a predefined transform.
+    """
 
     def __init__(self, src_word, tgt_word, opcodes):
-        """Create a new transform matching instance
-           :src_word : original word
-           :tgt_word : modified word
+        """
+        Create a new transform matching instance.
+
+        Args:
+            src_word : string, original word
+            tgt_word : string, modified word
+
+        Return:
+            None
+
         """
         self.src_word = src_word
         self.tgt_word = tgt_word
@@ -511,11 +528,15 @@ class ApplySuffixTransorm(object):
         self.opcodes = opcodes
 
     def apply(self):
-        """Try to apply the transform
-            :return: Transformed word or None if cannot transform
+        """
+        Try to apply the transform.
+
+        Return:
+            Transformed word or None if cannot transform
+
         """
         transformed = None
-
+        # 11 个 append operation
         if self.opcode == self.opcodes.APPEND_s:
             transformed = append_suffix(self.src_word, "s")
 
@@ -548,7 +569,7 @@ class ApplySuffixTransorm(object):
 
         if self.opcode == self.opcodes.APPEND_ation:
             transformed = append_suffix(self.src_word, "ation")
-
+        # 11 个 remove operation
         if self.opcode == self.opcodes.REMOVE_s:
             transformed = remove_suffix(self.src_word, "s")
 
@@ -582,6 +603,7 @@ class ApplySuffixTransorm(object):
         if self.opcode == self.opcodes.REMOVE_ation:
             transformed = remove_suffix(self.src_word, "ation")
 
+        # 18*2 个 replace operation
         if self.opcode == self.opcodes.E_TO_ING:
             transformed = transform_suffix(self.src_word, "e", "ing")
 
