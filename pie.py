@@ -38,6 +38,8 @@ class PieModel(object):
 
     本类中包含以下方法:
         __init__: 初始化方法
+        predict_sentences: 针对句子列表进行纠错预测
+        correct: 针对输入错误的文本进行语法纠错
 
     本类中包含以下属性:
         None
@@ -86,6 +88,7 @@ class PieModel(object):
         FLAGS.use_tpu = use_tpu
         FLAGS.n_gpus = numGpu
         FLAGS.init_checkpoint = False
+        FLAGS.predict_batch_size = 128
         self.use_tpu = use_tpu
         self.max_seq_length = max_seq_length
         self.do_spell_check = doSpellCheck
@@ -106,7 +109,7 @@ class PieModel(object):
 
     def _loading_estimator(self, FLAGS):
         """
-        针对句子列表进行预测.
+        初始化及加载估计器.
 
         Args:
             FLAGS: class, 命令行参数解析类
@@ -116,6 +119,7 @@ class PieModel(object):
         """
         if not FLAGS.do_train and not FLAGS.do_eval and not FLAGS.do_predict:
             raise ValueError("At least one of `do_train`, `do_eval` or `do_predict' must be True.")
+        # 使用tpu时需要drop out剩余不足一个batch size的样本
         self.predict_drop_remainder = True if FLAGS.use_tpu else False
         # bert配置文件
         bert_config = BertConfig.from_json_file(FLAGS.bert_config_file)
@@ -123,11 +127,10 @@ class PieModel(object):
             raise ValueError(
                 "Cannot use sequence length %d because the BERT model was only trained up to sequence length %d" % (
                     FLAGS.max_seq_length, bert_config.max_position_embeddings))
-
-        # 读入文件：插入编辑tokens
+        # 读取：插入编辑tokens、id
         inserts = pickle.load(tf.gfile.Open(FLAGS.path_inserts, "rb"))
         insert_ids = self.tokenizer.convert_tokens_to_ids(inserts)
-        # 读取：多token插入编辑
+        # 读取：多token插入编辑tokens、id
         multitoken_inserts = pickle.load(tf.gfile.Open(FLAGS.path_multitoken_inserts, "rb"))
         multitoken_insert_ids = list_to_ids(multitoken_inserts, self.tokenizer)
 
@@ -157,8 +160,8 @@ class PieModel(object):
             tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(FLAGS.tpu_name,
                                                                                   zone=FLAGS.tpu_zone,
                                                                                   project=FLAGS.gcp_project)
+            # 2.设置运行配置run_config
             is_per_host = tf.contrib.tpu.InputPipelineConfig.PER_HOST_V2
-            # 2.设置run_config
             run_config = tf.contrib.tpu.RunConfig(
                 cluster=tpu_cluster_resolver,
                 master=FLAGS.master,
@@ -169,7 +172,7 @@ class PieModel(object):
                                                     num_shards=FLAGS.num_tpu_cores,
                                                     per_host_input_for_training=is_per_host),
             )
-            # 3.构造TPU评估器对象，用于TPU训练
+            # 3.构造TPU估计器对象，用于TPU训练
             estimator = tf.contrib.tpu.TPUEstimator(
                 use_tpu=FLAGS.use_tpu,  # 是否使用tpu, boolean
                 model_fn=model_fn,  # 模型函数
@@ -182,7 +185,6 @@ class PieModel(object):
             dist_strategy = tf.contrib.distribute.MirroredStrategy(
                 num_gpus=FLAGS.n_gpus,  # 使用gpu的个数
                 cross_device_ops=AllReduceCrossDeviceOps('nccl', num_packs=FLAGS.n_gpus),  # 各设备之间的数据操作方式
-                # cross_device_ops=AllReduceCrossDeviceOps('hierarchical_copy'),
             )
             # 2.设置会话session配置
             session_config = tf.ConfigProto(
@@ -202,12 +204,12 @@ class PieModel(object):
             estimator = tf.estimator.Estimator(
                 model_fn=model_fn,
                 config=run_config,
-                params={"batch_size": FLAGS.train_batch_size})
+                params={"batch_size": FLAGS.predict_batch_size})
         return estimator
 
     def _word_tokenize(self, sentences, doSpellCheck=True):
         """
-        针对句子列表进行单词级tokenize.
+        针对句子列表进行word piece级tokenize.
 
         Args:
             sentences: list of string, 句子列表
@@ -227,7 +229,7 @@ class PieModel(object):
         return tokensList, idsList
 
     def _get_feature(self, example):
-        """提取特征数据."""
+        """提取样本的特征数据."""
         return sequence_padding(example, None, self.max_seq_length)
 
     def _create_generator(self):
@@ -236,8 +238,8 @@ class PieModel(object):
             features = (self._get_feature(f) for f in self.idsList)
             yield dict(zip(("input_sequence", "input_mask", "segment_ids", "edit_sequence"), zip(*features)))
 
-    def input_fn_builder(self):
-        """数据输入函数构建."""
+    def _input_fn_builder(self):
+        """构建数据输入函数."""
         dataset = tf.data.Dataset.from_generator(self._create_generator,
                                                  output_types={'input_sequence': tf.int64,
                                                                'input_mask': tf.int64,
@@ -252,7 +254,7 @@ class PieModel(object):
         dataset = iterator.get_next()
         return dataset
 
-    def clean_up_tokenization(self, text):
+    def _clean_up_tokenization(self, text):
         """Clean up a list of simple English tokenization artifacts like spaces before punctuations and abreviated forms."""
         out_string = (
             text.replace(" .", ".")
@@ -271,11 +273,11 @@ class PieModel(object):
 
     def predict_sentences(self, sentences, doSpellCheck=True, doCleanUp=True):
         """
-        针对句子列表进行预测.
+        针对句子列表进行纠错预测.
 
         Args:
             sentences: list of string, 句子列表
-            doSpellCheck: boolean, 是否先进行简单拼写检查
+            doSpellCheck: boolean, 是否先进行autocorrect拼写检查
             doCleanUp: boolean, 是否进行空格及特殊字符的缩进处理
 
         Return:
@@ -288,7 +290,7 @@ class PieModel(object):
         tokensList, self.idsList = self._word_tokenize(sentences, doSpellCheck)
         # 构造输入函数
         if self.first_run:
-            self.predictions = self.estimator.predict(input_fn=self.input_fn_builder,
+            self.predictions = self.estimator.predict(input_fn=self._input_fn_builder,
                                                       checkpoint_path=FLAGS.predict_checkpoint,
                                                       yield_single_examples=False)
             self.first_run = False
@@ -302,16 +304,11 @@ class PieModel(object):
             corTokens = apply_opcodes(tokensList[i], editList, self.opcodes, self.tokenizer.basic_tokenizer,
                                       self.inferMode)
             if doCleanUp:
-                corSent = self.clean_up_tokenization(" ".join(corTokens))
+                corSent = self._clean_up_tokenization(" ".join(corTokens))
             else:
                 corSent = " ".join(corTokens)
             corSentences.append(corSent)
         return corSentences
-
-    def _first_check(self):
-        """开始第一次检查句子以加载模型到内存中."""
-        self.correct("Jack is the writer who have liveed in the beijing citys.")
-        return
 
     def correct(self, text, lang="en", mode="grammar", hyphen=" ", doSentToken=True, doSpellCheck=None, numRound=4,
                 doCleanUp=True):
@@ -329,6 +326,7 @@ class PieModel(object):
             doCleanUp: boolean, 是否进行空格及特殊字符的缩进处理
 
         Return:
+            result: dict
 
         """
         if doSentToken:
@@ -346,3 +344,8 @@ class PieModel(object):
         result = {"text": text, "correction": hyphen.join(corSentences), "sentences": oriSentences,
                   "corSent": corSentences, "code": 0, }
         return result
+
+    def _first_check(self):
+        """第一次检查句子以加载模型常驻内存."""
+        self.correct("Jack is the writer who have liveed in the beijing citys.")
+        return
