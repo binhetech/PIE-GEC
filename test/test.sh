@@ -1,0 +1,1 @@
+curl -X POST -H "Content-Type:application/json" -d '{"text": "With the development of the TV, there is an problems. Joel is the writter who have liveed in beijing city."}' http://0.0.0.0:12023/writingGrammarCorrect
